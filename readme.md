@@ -104,45 +104,6 @@ The **Medical Report Diagnosis Web App** is an MVP project that allows users to 
 
 ---
 
-## 📊 Example Workflow
-
-**Uploaded Report:**
-- Hemoglobin: 11.2 g/dL
-- LDL Cholesterol: 160 mg/dL
-- HDL Cholesterol: 38 mg/dL
-
-
-**Parsed JSON:**
-```json
-{
-  "parameters": [
-    {
-      "code": "HB",
-      "name": "Hemoglobin",
-      "value": 11.2,
-      "unit": "g/dL",
-      "range": { "low": 13, "high": 17 },
-      "status": "LOW"
-    },
-    {
-      "code": "LDL",
-      "name": "LDL Cholesterol",
-      "value": 160,
-      "unit": "mg/dL",
-      "range": { "low": 0, "high": 100 },
-      "status": "HIGH"
-    },
-    {
-      "code": "HDL",
-      "name": "HDL Cholesterol",
-      "value": 38,
-      "unit": "mg/dL",
-      "range": { "low": 40, "high": 999 },
-      "status": "LOW"
-    }
-  ]
-}
-```
 ### Sample Output
 Your hemoglobin is low, which may suggest anemia.
 LDL cholesterol is high, increasing cardiovascular risk.
