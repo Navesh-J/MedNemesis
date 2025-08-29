@@ -6,10 +6,53 @@
 
 generator client {
   provider = "prisma-client-js"
-  output   = "../generated/prisma"
+  // output   = "../generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model Parameter {
+  id          Int      @id @default(autoincrement())
+  name        String
+  unit        String
+  minValue    Float
+  maxValue    Float
+  description String?
+  synonyms    ParameterSynonym[]
+  values      ReportValue[]
+}
+
+model ParameterSynonym {
+  id          Int       @id @default(autoincrement())
+  parameter   Parameter @relation(fields: [parameterId], references: [id])
+  parameterId Int
+  synonym     String
+}
+
+model Report {
+  id        Int           @id @default(autoincrement())
+  fileName  String
+  uploadedAt DateTime     @default(now())
+  values    ReportValue[]
+  analysis  Analysis?
+}
+
+model ReportValue {
+  id          Int       @id @default(autoincrement())
+  report      Report    @relation(fields: [reportId], references: [id])
+  reportId    Int
+  parameter   Parameter @relation(fields: [parameterId], references: [id])
+  parameterId Int
+  value       Float
+}
+
+model Analysis {
+  id         Int     @id @default(autoincrement())
+  report     Report  @relation(fields: [reportId], references: [id])
+  reportId   Int     @unique
+  summary    String
+  suggestions String
 }
