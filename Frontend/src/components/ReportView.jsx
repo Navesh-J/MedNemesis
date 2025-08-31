@@ -10,10 +10,12 @@ export default function ReportView({ report, onRemove }) {
   const handleDownloadPDF = () => {
     const doc = new jsPDF();
 
+    // Title
     doc.setFontSize(18);
-    doc.setTextColor(50, 150, 255); // neon blue title
+    doc.setTextColor(50, 150, 255);
     doc.text("Medical Report", 14, 20);
 
+    // Table data
     const tableColumn = ["Parameter", "Value", "Unit", "Safe Range"];
     const tableRows = [];
 
@@ -32,7 +34,7 @@ export default function ReportView({ report, onRemove }) {
       head: [tableColumn],
       body: tableRows,
       headStyles: {
-        fillColor: [60, 80, 150], // dark neon header
+        fillColor: [60, 80, 150],
         textColor: 255,
         fontStyle: "bold",
       },
@@ -45,6 +47,24 @@ export default function ReportView({ report, onRemove }) {
       },
       margin: { top: 10, left: 14, right: 14 },
     });
+
+    // AI Analysis Section in PDF
+    if (report.analysis) {
+      const finalY = doc.lastAutoTable.finalY + 10;
+      doc.setFontSize(14);
+      doc.setTextColor(112, 215, 255);
+      doc.text("AI Analysis & Suggestions", 14, finalY);
+
+      doc.setFontSize(12);
+      doc.setTextColor(200);
+
+      doc.text(`Summary: ${report.analysis.summary}`, 14, finalY + 8, {
+        maxWidth: 180,
+      });
+      doc.text(`Suggestions: ${report.analysis.suggestions}`, 14, finalY + 16, {
+        maxWidth: 180,
+      });
+    }
 
     doc.save(`report_${Date.now()}.pdf`);
   };
@@ -94,6 +114,21 @@ export default function ReportView({ report, onRemove }) {
             </tbody>
           </table>
         </div>
+
+        {/* AI Analysis Section */}
+        {report.analysis && (
+          <div className="mt-6 p-4 border rounded-xl bg-[#22213a]/80 text-[#70d7ff] shadow-lg">
+            <h3 className="text-lg font-bold mb-2">
+              AI Analysis & Suggestions
+            </h3>
+            <p className="mb-2">
+              <strong>Summary:</strong> {report.analysis.summary}
+            </p>
+            <p>
+              <strong>Suggestions:</strong> {report.analysis.suggestions}
+            </p>
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex gap-4 mt-4 justify-end">

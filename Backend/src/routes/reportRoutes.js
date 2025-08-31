@@ -4,6 +4,7 @@ import path from "path";
 import fs from "fs";
 import Tesseract from "tesseract.js";
 import { saveReport } from "../services/reportService.js";
+import { saveAnalysis } from "../services/analysisService.js";
 
 const router = express.Router();
 
@@ -29,10 +30,13 @@ router.post("/upload", upload.single("file"), async (req, res) => {
     // Save parsed report to DB
     const report = await saveReport(ocrText, req.file.originalname);
 
+    const analysisResult = await getAIAnalysis(report.values);
+    const analysis = await saveAnalysis(report.id, analysisResult.summary, analysisResult.suggestions);
+
     // Remove temp uploaded file
     fs.unlinkSync(filePath);
 
-    res.json({ success: true, report });
+    res.json({ success: true, report, analysis});
   } catch (err) {
     console.error("Error processing uploaded report:", err);
     res.status(500).json({ success: false, error: err.message });
