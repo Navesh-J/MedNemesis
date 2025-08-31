@@ -25,7 +25,15 @@ function FileUpload() {
         body: formData,
       });
       const data = await res.json();
-      setReport(data.report);
+
+      if (!data.success) throw new Error(data.error || "Upload failed");
+
+      // Map backend response to ReportView-friendly format
+      setReport({
+        fullText: data.report.fullText,
+        aiResult: data.report.aiResult,
+        pdfUrl: data.report.pdfUrl ? `${BASE_URL}${data.report.pdfUrl}` : null,
+      });
     } catch (err) {
       console.error("Upload failed:", err);
       alert("Upload failed. Check console.");
@@ -38,12 +46,12 @@ function FileUpload() {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-    const droppedFile = e.dataTransfer.files[0]; // Fix: pick first file
+    const droppedFile = e.dataTransfer.files[0];
     if (droppedFile) setFile(droppedFile);
   }, []);
 
   const handleFileSelect = (e) => {
-    const selectedFile = e.target.files[0]; // Fix: pick first file
+    const selectedFile = e.target.files[0];
     if (selectedFile) setFile(selectedFile);
   };
 
@@ -57,7 +65,7 @@ function FileUpload() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#141032] via-[#232159] to-[#09346b] p-6">
       <motion.div
-        className="bg-[#22213a]/90 backdrop-blur-xl rounded-3xl shadow-2xl p-8 w-full max-w-md flex flex-col items-center border border-[#456ceb] border-opacity-40"
+        className="bg-[#22213a]/90 backdrop-blur-xl rounded-3xl shadow-2xl p-8 w-full max-w-4xl flex flex-col items-center border border-[#456ceb] border-opacity-40"
         initial={{ opacity: 0, y: 50 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.9 }}
