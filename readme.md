@@ -1,17 +1,17 @@
-# 🧾 Medical Report Diagnosis Web App
+# 🧾 Medical Report Diagnosis Web App (MVP)
 
 ## 📌 Project Overview
-The **Medical Report Diagnosis Web App** is an MVP project that allows users to **upload medical reports** (image/PDF), automatically extract test results, compare them against safe reference ranges, and provide **easy-to-understand insights and suggestions**.  
+The **Medical Report Diagnosis Web App** is a simplified MVP that allows users to **upload medical reports** (image or PDF), automatically extract test results using OCR, and get **easy-to-understand insights and suggestions**.  
 
-⚠️ **Disclaimer:** This project is **for educational and informational purposes only**. It does not provide medical advice, diagnosis, or treatment. Always consult a qualified healthcare professional for medical concerns.  
+⚠️ **Disclaimer:** This project is **for educational and informational purposes only**. It does **not** provide medical advice, diagnosis, or treatment. Always consult a qualified healthcare professional for medical concerns.  
 
 ---
 
 ## 🎯 Goals
-- Help users interpret medical report values in **simple, human-readable terms**.  
-- Identify **deficiencies and excesses** by comparing values with standard ranges.  
-- Provide **general lifestyle & diet suggestions** (non-diagnostic).  
-- Present insights in a **clean and user-friendly dashboard**.  
+- Simplify medical report interpretation for users in **plain English**.  
+- Highlight **abnormal values** clearly for user awareness.  
+- Provide **general suggestions** for lifestyle or health monitoring (non-diagnostic).  
+- Present results in a **clean, visually appealing format** with PDF export.  
 
 ---
 
@@ -21,110 +21,60 @@ The **Medical Report Diagnosis Web App** is an MVP project that allows users to 
    - File size ≤ 10 MB.  
 
 2. **OCR Processing**
-   - Uses **Google Cloud Vision API** to extract text and tables from reports.  
+   - Uses **Tesseract.js** to extract text from uploaded files.  
 
-3. **Parsing & Normalization**
-   - Identifies medical parameters (e.g., Hemoglobin, Glucose, Cholesterol).  
-   - Normalizes values and units.  
-   - Matches synonyms like `Hb`, `HGB`, `Hemoglobin`.  
+3. **AI Analysis**
+   - Uses **Google Gemini API** to analyze report text.  
+   - Generates **structured JSON** with all headings:
+     - Patient Information, Report Type, Findings Summary, Normal & Abnormal Results, Diagnosis, Severity, Suggested Follow-Up, Treatment Recommendations, Prognosis, Preventive Care, Conclusion.  
+   - Summaries are in **easy-to-understand language** for non-medical users.  
 
-4. **Reference Ranges**
-   - Safe ranges stored in **PostgreSQL database**.  
-   - Compares extracted values against standard adult ranges.  
+4. **PDF Export**
+   - Generates a **visually appealing PDF** with:
+     - Headings
+     - Bullet points
+     - Highlights for abnormal results
+     - Colors and spacing for readability
 
-5. **Analysis Engine**
-   - Flags **LOW / NORMAL / HIGH** for each parameter.  
-   - Generates structured JSON output.  
+5. **Frontend (React)**
+   - Upload interface for reports.  
+   - Displays full OCR text.  
+   - Displays AI analysis with headings and readable formatting.  
+   - Download PDF button for generated report.  
 
-6. **AI Insights**
-   - Uses **Gemini API** to summarize findings in plain English.  
-   - Provides **general tips** (diet, hydration, lifestyle).  
-   - Adds strong disclaimer.  
-
-7. **Frontend (React)**
-   - File upload interface.  
-   - Results table with **color-coded statuses**.  
-   - Cards for insights and suggestions.  
-   - Option to copy/download summary.  
-
-8. **Export Option**
-   - An option to export and download the generated report as a PDF file.
 ---
 
 ## 🛠️ Tech Stack
 
 ### Frontend
-- **React.js / Next.js** → User interface  
+- **React.js** → User interface  
 - **TailwindCSS** → Styling  
-- **Recharts / Chart.js** → Graphs & trends  
+- **Framer Motion** → Animations  
+- **PDFKit** → PDF generation  
 
 ### Backend
-- **Node.js (Express.js)** → REST API  
-- **Google Cloud Vision API** → OCR for text extraction  
-- **Gemini API (Google AI)** → Summaries & insights  
-- **PostgreSQL** → Store safe ranges & results  
+- **Node.js (Express.js)** → REST API server  
+- **Tesseract.js** → OCR for text extraction  
+- **Google Gemini API** → AI-powered analysis and suggestions  
+
+### Deployment
+- **Render** → Backend hosting  
+- **Vercel** → Frontend hosting  
 
 ---
 
 ## 🔄 System Flow
-1. User uploads report via frontend.  
-2. Backend sends file to **Cloud Vision API** → extracts raw text.  
-3. Text is parsed → values normalized → mapped to **reference ranges** (Postgres).  
-4. Backend generates structured JSON → sends facts to **Gemini API**.  
-5. Gemini returns **summary + suggestions**.  
-6. Frontend displays results:  
-   - Table of parameters (value, unit, safe range, status).  
-   - Insights and recommendations.  
-   - Download/Copy option.  
+1. User uploads report via the frontend.  
+2. Backend extracts text using **Tesseract.js**.  
+3. Extracted text is sent to **Gemini AI** for analysis.  
+4. AI returns structured JSON with headings and explanations in **easy language**.  
+5. Backend generates a **formatted PDF** highlighting important points and abnormal results.  
+6. Frontend displays:
+   - Full report text
+   - Simplified AI insights with bullet points
+   - Downloadable PDF
 
 ---
-
-## 🗄️ Database Design (Postgres)
-### `parameters`
-- `id` (uuid)  
-- `code` (HB, FBS, LDL)  
-- `name` (Hemoglobin, Fasting Glucose)  
-- `unit` (g/dL, mg/dL)  
-- `low_normal`, `high_normal`  
-- `notes`  
-
-### `parameter_synonyms`
-- `parameter_code` → `Hb`, `HGB`  
-
-### `unit_conversions`
-- Convert between units (e.g., mmol/L ↔ mg/dL).  
-
-### `reports`
-- Report metadata (filename, type, created_at).  
-
-### `report_results`
-- OCR raw text  
-- Structured JSON (parsed values + statuses)  
-- AI summary + tips  
-
----
-
-### Sample Output
-Your hemoglobin is low, which may suggest anemia.
-LDL cholesterol is high, increasing cardiovascular risk.
-HDL cholesterol is low, which is protective cholesterol.
-
-### Suggestions:
-- Eat iron-rich foods (spinach, legumes, lean meats).
-- Reduce saturated fats and processed foods.
-- Exercise regularly and increase fiber intake.
-
-⚠️ This is educational and not medical advice. Please consult a doctor.
-
-### 📈 Future Enhancements
-
-- User authentication & private storage.
-- Trends & history (multi-report comparison).
-- Lab-specific templates for better parsing.
-- Support for pediatric/geriatric ranges.
-- Export to PDF.
 
 ### ⚠️ Disclaimer
-
-This application is not a substitute for medical advice.
-It is intended for educational purposes only. Always consult a qualified healthcare professional for diagnosis or treatment.
+This application is **not a substitute for medical advice**. It is intended for **educational purposes only**. Always consult a qualified healthcare professional for diagnosis or treatment.
