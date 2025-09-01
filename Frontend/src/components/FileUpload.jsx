@@ -1,23 +1,22 @@
 import { useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-
 import ReportView from "./ReportView";
 
 const BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
 function FileUpload() {
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]); // multiple files
   const [report, setReport] = useState(null);
   const [loading, setLoading] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef(null);
 
   const handleUpload = async () => {
-    if (!file) return;
+    if (!files.length) return;
     setLoading(true);
 
     const formData = new FormData();
-    formData.append("file", file);
+    files.forEach((f) => formData.append("files", f));
 
     try {
       const res = await fetch(`${BASE_URL}/reports/upload`, {
@@ -28,7 +27,6 @@ function FileUpload() {
 
       if (!data.success) throw new Error(data.error || "Upload failed");
 
-      // Map backend response to ReportView-friendly format
       setReport({
         fullText: data.report.fullText,
         aiResult: data.report.aiResult,
@@ -46,21 +44,18 @@ function FileUpload() {
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
-    const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile) setFile(droppedFile);
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    if (droppedFiles.length) setFiles(droppedFiles);
   }, []);
 
   const handleFileSelect = (e) => {
-    const selectedFile = e.target.files[0];
-    if (selectedFile) setFile(selectedFile);
+    const selectedFiles = Array.from(e.target.files);
+    if (selectedFiles.length) setFiles(selectedFiles);
   };
 
   const openFileDialog = () => {
     if (fileInputRef.current) fileInputRef.current.click();
   };
-
-  const isImage = file && file.type.startsWith("image/");
-  const isPDF = file && file.type === "application/pdf";
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-[#141032] via-[#232159] to-[#09346b] p-6">
@@ -76,7 +71,7 @@ function FileUpload() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 1.2 }}
         >
-          Upload Medical Report
+          Upload Medical Reports
         </motion.h1>
 
         <motion.div
@@ -104,51 +99,60 @@ function FileUpload() {
           }}
         >
           <p className="text-center text-[#70d7ff] font-semibold mb-2">
-            {file
-              ? `Selected: ${file.name}`
-              : "Drag & drop a file or click to select"}
+            {files.length
+              ? `Selected: ${files.length} file(s)`
+              : "Drag & drop files or click to select"}
           </p>
           <input
             ref={fileInputRef}
             type="file"
             className="hidden"
             onChange={handleFileSelect}
+            multiple // 🔹 allow multiple
           />
 
           <AnimatePresence mode="wait">
-            {file && (
+            {files.length > 0 && (
               <motion.div
-                key={file.name}
-                className="mt-4 flex flex-col items-center"
+                key="previews"
+                className="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-4"
                 initial={{ opacity: 0, scale: 0.85 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.85 }}
                 transition={{ duration: 0.3 }}
               >
-                {isImage && (
-                  <motion.img
-                    src={URL.createObjectURL(file)}
-                    alt="preview"
-                    className="w-32 h-32 object-contain rounded-xl shadow-lg border border-[#70d7ff]/50"
-                    initial={{ scale: 0.7 }}
-                    animate={{ scale: 1 }}
-                    transition={{ duration: 0.4 }}
-                  />
-                )}
-                {isPDF && (
-                  <div className="flex flex-col items-center justify-center w-32 h-32 bg-[#31213a]/60 rounded-lg shadow-md p-4 border border-[#e05355]/40">
-                    <svg
-                      className="w-12 h-12 text-[#e05355] mb-2"
-                      fill="currentColor"
-                      viewBox="0 0 24 24"
+                {files.map((file, idx) => {
+                  const isImage = file.type.startsWith("image/");
+                  const isPDF = file.type === "application/pdf";
+                  return (
+                    <div
+                      key={idx}
+                      className="flex flex-col items-center justify-center"
                     >
-                      <path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm0 18a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm1-9h-2v6h2V9z" />
-                    </svg>
-                    <p className="text-[#e05355] text-xs text-center break-words">
-                      {file.name}
-                    </p>
-                  </div>
-                )}
+                      {isImage && (
+                        <motion.img
+                          src={URL.createObjectURL(file)}
+                          alt="preview"
+                          className="w-24 h-24 object-contain rounded-lg shadow-md border border-[#70d7ff]/40"
+                        />
+                      )}
+                      {isPDF && (
+                        <div className="flex flex-col items-center justify-center w-24 h-24 bg-[#31213a]/60 rounded-lg shadow-md p-2 border border-[#e05355]/40">
+                          <svg
+                            className="w-8 h-8 text-[#e05355] mb-1"
+                            fill="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm0 18a1.5 1.5 0 110-3 1.5 1.5 0 010 3zm1-9h-2v6h2V9z" />
+                          </svg>
+                          <p className="text-[#e05355] text-xs text-center break-words">
+                            {file.name}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </motion.div>
             )}
           </AnimatePresence>
@@ -156,10 +160,10 @@ function FileUpload() {
 
         <motion.button
           onClick={handleUpload}
-          disabled={loading || !file}
+          disabled={loading || !files.length}
           className={`w-full px-6 py-3 font-bold rounded-xl text-white shadow-lg transition-all 
             ${
-              loading || !file
+              loading || !files.length
                 ? "bg-gradient-to-br from-[#4367cf] to-[#2889c1] opacity-50 cursor-not-allowed"
                 : "bg-gradient-to-br from-[#11d1a7] via-[#456ceb] to-[#091e42] hover:from-[#70d7ff] hover:to-[#456ceb] hover:shadow-neon"
             }`}

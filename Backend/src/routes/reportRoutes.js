@@ -9,35 +9,53 @@ import PDFDocument from "pdfkit";
 const router = express.Router();
 const upload = multer({ dest: "uploads/" });
 
-router.post("/upload", upload.single("file"), async (req, res) => {
+router.post("/upload", upload.array("files"), async (req, res) => {
   try {
-    if (!req.file)
-      return res
-        .status(400)
-        .json({ success: false, error: "File is required" });
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ success: false, error: "At least one file is required" });
+    }
 
-    const filePath = path.resolve(req.file.path);
+    let combinedText = "";
+    const ocrResults = [];
 
-    // OCR extraction
-    const {
-      data: { text: ocrText },
-    } = await Tesseract.recognize(filePath, "eng");
-    console.log("OCR Text:", ocrText);
+    // 🔹 OCR for each file
+    for (const file of req.files) {
+      const filePath = path.resolve(file.path);
+      const {
+        data: { text: ocrText },
+      } = await Tesseract.recognize(filePath, "eng");
 
-    // AI generates structured report with all headings
-    const aiResult = await getAIAnalysis(ocrText);
+      combinedText += `\n--- Page ${ocrResults.length + 1} ---\n${ocrText}\n`;
+      ocrResults.push(ocrText);
 
-    // Generate PDF
+      fs.unlinkSync(filePath); // cleanup temp file
+    }
+
+    // 🔹 AI Analysis on combined text
+    const aiResult = await getAIAnalysis(combinedText);
+
+    // 🔹 Generate PDF
     const pdfName = `report_${Date.now()}.pdf`;
     const pdfPath = path.join("uploads", pdfName);
     const doc = new PDFDocument({ margin: 40, size: "A4" });
     doc.pipe(fs.createWriteStream(pdfPath));
 
-    // PDF Title
+    // Title
     doc.fontSize(22).fillColor("#0B3D91").text("Medical Report", { align: "center" });
     doc.moveDown(2);
 
-    // Helper function to format headings
+    // Optional: Add OCR pages section
+    doc.fontSize(18).fillColor("#1E90FF").text("Extracted Text (OCR)", { underline: true });
+    doc.moveDown(1);
+
+    ocrResults.forEach((pageText, idx) => {
+      doc.fontSize(14).fillColor("#0B3D91").text(`Page ${idx + 1}`, { underline: true });
+      doc.moveDown(0.5);
+      doc.fontSize(10).fillColor("#333").text(pageText.trim() || "No text found");
+      doc.moveDown(1);
+    });
+
+    // Helper to format AI output
     function writeSection(title, content) {
       doc.fontSize(16).fillColor("#1E90FF").text(title, { underline: true });
       doc.moveDown(0.5);
@@ -49,7 +67,7 @@ router.post("/upload", upload.single("file"), async (req, res) => {
             for (const [k, v] of Object.entries(value)) {
               let textColor = "#000";
               if (title.toLowerCase().includes("abnormal") || k.toLowerCase().includes("outofrange")) {
-                textColor = "#FF0000"; // highlight abnormal results
+                textColor = "#FF0000"; // highlight abnormal
               }
               doc.fontSize(12).fillColor(textColor).text(`  • ${k}: ${v || "Not Available"}`);
             }
@@ -72,9 +90,12 @@ router.post("/upload", upload.single("file"), async (req, res) => {
       doc.moveDown(1);
     }
 
-    // Loop through AI headings
+    // 🔹 AI Analysis section
+    doc.addPage();
+    doc.fontSize(18).fillColor("#1E90FF").text("AI Analysis", { underline: true });
+    doc.moveDown(1);
+
     for (const [heading, content] of Object.entries(aiResult)) {
-      // Convert camelCase to Title Case for PDF
       const formattedHeading = heading
         .replace(/([A-Z])/g, " $1")
         .replace(/^./, (str) => str.toUpperCase());
@@ -83,15 +104,11 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 
     doc.end();
 
-    // Remove uploaded file
-    fs.unlinkSync(filePath);
-
     const pdfUrl = `/uploads/${pdfName}`;
 
-    // Return AI result + OCR text + PDF URL
-    res.json({ success: true, report: { fullText: ocrText, aiResult, pdfUrl } });
+    res.json({ success: true, report: { fullText: combinedText, aiResult, pdfUrl } });
   } catch (err) {
-    console.error("Error processing report:", err);
+    console.error("Error processing reports:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
