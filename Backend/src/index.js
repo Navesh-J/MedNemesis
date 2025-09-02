@@ -10,7 +10,7 @@ app.use(express.urlencoded({ extended: true }));
 // CORS (allow frontend)
 app.use(
   cors({
-    origin: ["http://localhost:5173","https://mednemesis.onrender.com"],
+    origin: ["http://localhost:5173","https://mednemesis.vercel.app"],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   })
 );
