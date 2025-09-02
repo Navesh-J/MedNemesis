@@ -1,7 +1,7 @@
-# 🧾 Medical Report Diagnosis Web App (MVP)
+# 🧾 MedNemesis
 
 ## 📌 Project Overview
-The **Medical Report Diagnosis Web App** is a simplified MVP that allows users to **upload medical reports** (image or PDF), automatically extract test results using OCR, and get **easy-to-understand insights and suggestions**.  
+**MedNemesis** is a simplified MVP that allows users to **upload medical reports** (image or PDF), automatically extract test results using OCR, and get **easy-to-understand insights and suggestions**.  
 
 ⚠️ **Disclaimer:** This project is **for educational and informational purposes only**. It does **not** provide medical advice, diagnosis, or treatment. Always consult a qualified healthcare professional for medical concerns.  
 
