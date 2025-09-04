@@ -10,10 +10,14 @@ app.use(express.urlencoded({ extended: true }));
 // CORS (allow frontend)
 app.use(
   cors({
-    origin: ["http://localhost:5173","https://mednemesis.vercel.app"],
+    origin: ["http://localhost:5173", "https://mednemesis.vercel.app"],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   })
 );
+
+app.get("/", (req, res) => {
+  res.json({ success: true, message: "Backend running successfully!" });
+});
 
 // Serve temporary uploaded PDFs
 app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
