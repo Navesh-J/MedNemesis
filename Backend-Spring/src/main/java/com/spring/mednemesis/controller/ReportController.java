@@ -1,5 +1,6 @@
 package com.spring.mednemesis.controller;
 
+import com.spring.mednemesis.ai.AIAnalysisService;
 import com.spring.mednemesis.ocr.OCRService;
 import net.sourceforge.tess4j.TesseractException;
 import org.springframework.http.ResponseEntity;
@@ -17,39 +18,66 @@ import java.util.Map;
 public class ReportController {
 
     private final OCRService ocrService;
+    private final AIAnalysisService aiAnalysisService;
 
-    public ReportController(OCRService ocrService) {
+    public ReportController(
+            OCRService ocrService,
+            AIAnalysisService aiAnalysisService) {
         this.ocrService = ocrService;
+        this.aiAnalysisService = aiAnalysisService;
     }
 
-    @PostMapping("/ocr")
-    public ResponseEntity<?> extractText(
-            @RequestParam("file")MultipartFile file) {
-        if(file.isEmpty()) {
+    @PostMapping("/analyze")
+    public ResponseEntity<?> analyzeReport(
+            @RequestParam("file") MultipartFile file) {
+        if (file.isEmpty()) {
             return ResponseEntity
                     .badRequest()
                     .body(Map.of(
-                            "success",false,
-                            "error","File is required"
+                            "success", false,
+                            "error", "File is required"
                     ));
         }
 
-        try{
+        try {
             String extractedText = ocrService.extractText(file);
+
+            if (extractedText == null || extractedText.isBlank()) {
+                return ResponseEntity
+                        .badRequest()
+                        .body(Map.of(
+                                "success", false,
+                                "error", "Could not extract any text from the report"
+                        ));
+            }
+
+            String analysis = aiAnalysisService.analyze(extractedText);
 
             return ResponseEntity.ok(
                     Map.of(
                             "success", true,
-                            "filename", file.getOriginalFilename(),
-                            "text", extractedText
+                            "fileName", file.getOriginalFilename(),
+                            "ocrText", extractedText,
+                            "analysis", analysis
                     )
             );
-        } catch (IOException | TesseractException e){
-            return ResponseEntity.badRequest().body(Map.of(
-                    "success",false,
-                    "error","OCR processing failed",
-                    "message", e.getMessage()
-            ));
+
+        } catch (IOException | TesseractException e) {
+            return ResponseEntity
+                    .internalServerError()
+                    .body(Map.of(
+                            "success", false,
+                            "error", "OCR processing failed",
+                            "message", e.getMessage()
+                    ));
+        } catch (Exception e) {
+            return ResponseEntity
+                    .internalServerError()
+                    .body(Map.of(
+                            "success", false,
+                            "error", "Report analysis failed",
+                            "message", e.getMessage()
+                    ));
         }
     }
 }
