@@ -12,6 +12,12 @@ import java.io.IOException;
 @Service
 public class OCRService {
 
+    private final OCRTextCleaner textCleaner;
+
+    public OCRService(OCRTextCleaner textCleaner) {
+        this.textCleaner = textCleaner;
+    }
+
     public String extractText(MultipartFile file) throws IOException, TesseractException {
 
         // Load tessdata from resources
@@ -25,11 +31,12 @@ public class OCRService {
         tesseract.setLanguage("eng");
 
         // Create temporary file from uploaded file
-        File tempFile = File.createTempFile("mednemesis-",getExtension(file));
+        File tempFile = File.createTempFile("mednemesis-", getExtension(file));
 
-        try{
+        try {
             file.transferTo(tempFile);
-            return tesseract.doOCR(tempFile);
+            String rawText = tesseract.doOCR(tempFile);
+            return textCleaner.clean(rawText);
         } finally {
             // Delete temporary file
             tempFile.delete();
@@ -39,7 +46,7 @@ public class OCRService {
     public String getExtension(MultipartFile file) {
         String filename = file.getOriginalFilename();
 
-        if(filename == null || !filename.contains(".")) {
+        if (filename == null || !filename.contains(".")) {
             return ".tmp";
         }
 
