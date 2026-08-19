@@ -3,6 +3,7 @@ package com.spring.mednemesis.controller;
 import com.spring.mednemesis.ai.AIAnalysisService;
 import com.spring.mednemesis.model.ReportAnalysisResponse;
 import com.spring.mednemesis.ocr.OCRService;
+import com.spring.mednemesis.pdf.PDFService;
 import net.sourceforge.tess4j.TesseractException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -12,7 +13,11 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/reports")
@@ -20,12 +25,15 @@ public class ReportController {
 
     private final OCRService ocrService;
     private final AIAnalysisService aiAnalysisService;
+    private final PDFService pdfService;
 
     public ReportController(
             OCRService ocrService,
-            AIAnalysisService aiAnalysisService) {
+            AIAnalysisService aiAnalysisService,
+            PDFService pdfService) {
         this.ocrService = ocrService;
         this.aiAnalysisService = aiAnalysisService;
+        this.pdfService = pdfService;
     }
 
     @PostMapping("/analyze")
@@ -41,6 +49,7 @@ public class ReportController {
         }
 
         try {
+            // OCR
             String extractedText = ocrService.extractText(file);
 
             if (extractedText == null || extractedText.isBlank()) {
@@ -52,17 +61,32 @@ public class ReportController {
                         ));
             }
 
+            // AI Analysis
             String analysis = aiAnalysisService.analyze(extractedText);
 
-            return ResponseEntity.ok(
+            // Generate PDF
+            byte[] pdfBytes = pdfService.generatePDF(analysis);
+
+            // Save PDF
+            Path uploadDirectory = Paths.get("uploads");
+            Files.createDirectories(uploadDirectory);
+            String pdfFilename = "report_" + UUID.randomUUID() + ".pdf";
+            Path pdfPath = uploadDirectory.resolve(pdfFilename);
+            Files.write(pdfPath, pdfBytes);
+
+            // PDF URL
+            String pdfUrl = "/uploads/" + pdfFilename;
+
+            ReportAnalysisResponse response =
                     new ReportAnalysisResponse(
                             true,
                             file.getOriginalFilename(),
                             extractedText,
                             analysis,
-                            null
-                    )
-            );
+                            pdfUrl
+                    );
+
+            return ResponseEntity.ok(response);
 
         } catch (IOException | TesseractException e) {
             return ResponseEntity
