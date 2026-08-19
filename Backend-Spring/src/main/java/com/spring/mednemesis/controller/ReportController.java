@@ -1,6 +1,7 @@
 package com.spring.mednemesis.controller;
 
 import com.spring.mednemesis.ai.AIAnalysisService;
+import com.spring.mednemesis.model.ReportAnalysisResponse;
 import com.spring.mednemesis.ocr.OCRService;
 import net.sourceforge.tess4j.TesseractException;
 import org.springframework.http.ResponseEntity;
@@ -54,11 +55,12 @@ public class ReportController {
             String analysis = aiAnalysisService.analyze(extractedText);
 
             return ResponseEntity.ok(
-                    Map.of(
-                            "success", true,
-                            "fileName", file.getOriginalFilename(),
-                            "ocrText", extractedText,
-                            "analysis", analysis
+                    new ReportAnalysisResponse(
+                            true,
+                            file.getOriginalFilename(),
+                            extractedText,
+                            analysis,
+                            null
                     )
             );
 
