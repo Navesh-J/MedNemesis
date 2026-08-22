@@ -31,6 +31,7 @@ public class ReportController {
             OCRService ocrService,
             AIAnalysisService aiAnalysisService,
             PDFService pdfService) {
+
         this.ocrService = ocrService;
         this.aiAnalysisService = aiAnalysisService;
         this.pdfService = pdfService;
@@ -38,49 +39,143 @@ public class ReportController {
 
     @PostMapping("/analyze")
     public ResponseEntity<?> analyzeReport(
-            @RequestParam("file") MultipartFile file) {
-        if (file.isEmpty()) {
+            @RequestParam("files") MultipartFile[] files) {
+
+        // =====================================================
+        // VALIDATE FILES
+        // =====================================================
+
+        if (files == null || files.length == 0) {
             return ResponseEntity
                     .badRequest()
                     .body(Map.of(
                             "success", false,
-                            "error", "File is required"
+                            "error", "At least one file is required"
                     ));
         }
 
-        try {
-            // OCR
-            String extractedText = ocrService.extractText(file);
+        for (MultipartFile file : files) {
 
-            if (extractedText == null || extractedText.isBlank()) {
+            if (file == null || file.isEmpty()) {
                 return ResponseEntity
                         .badRequest()
                         .body(Map.of(
                                 "success", false,
-                                "error", "Could not extract any text from the report"
+                                "error", "One or more uploaded files are empty"
+                        ));
+            }
+        }
+
+        try {
+
+            // =================================================
+            // OCR — PROCESS EVERY PAGE
+            // =================================================
+
+            StringBuilder combinedText =
+                    new StringBuilder();
+
+            for (int i = 0; i < files.length; i++) {
+
+                MultipartFile file = files[i];
+
+                String extractedText =
+                        ocrService.extractText(file);
+
+                if (
+                        extractedText != null
+                                && !extractedText.isBlank()
+                ) {
+
+                    combinedText
+                            .append("\n\n")
+                            .append("===== PAGE ")
+                            .append(i + 1)
+                            .append(" =====\n\n");
+
+                    combinedText.append(extractedText);
+                }
+            }
+
+            String extractedText =
+                    combinedText.toString()
+                            .trim();
+
+            // =================================================
+            // VALIDATE OCR RESULT
+            // =================================================
+
+            if (extractedText.isBlank()) {
+
+                return ResponseEntity
+                        .badRequest()
+                        .body(Map.of(
+                                "success", false,
+                                "error",
+                                "Could not extract any text from the uploaded report"
                         ));
             }
 
-            // AI Analysis
-            String analysis = aiAnalysisService.analyze(extractedText);
+            // =================================================
+            // ONE AI ANALYSIS
+            // =================================================
 
-            // Generate PDF
-            byte[] pdfBytes = pdfService.generatePDF(analysis);
+            String analysis =
+                    aiAnalysisService.analyze(extractedText);
 
-            // Save PDF
-            Path uploadDirectory = Paths.get("uploads");
-            Files.createDirectories(uploadDirectory);
-            String pdfFilename = "report_" + UUID.randomUUID() + ".pdf";
-            Path pdfPath = uploadDirectory.resolve(pdfFilename);
-            Files.write(pdfPath, pdfBytes);
+            // =================================================
+            // GENERATE ONE PDF
+            // =================================================
 
+            byte[] pdfBytes =
+                    pdfService.generatePDF(analysis);
+
+            // =================================================
+            // SAVE PDF
+            // =================================================
+
+            Path uploadDirectory =
+                    Paths.get("uploads");
+
+            Files.createDirectories(
+                    uploadDirectory
+            );
+
+            String pdfFilename =
+                    "report_" +
+                            UUID.randomUUID() +
+                            ".pdf";
+
+            Path pdfPath =
+                    uploadDirectory.resolve(
+                            pdfFilename
+                    );
+
+            Files.write(
+                    pdfPath,
+                    pdfBytes
+            );
+
+            // =================================================
             // PDF URL
-            String pdfUrl = "/uploads/" + pdfFilename;
+            // =================================================
+
+            String pdfUrl =
+                    "/uploads/" + pdfFilename;
+
+            // =================================================
+            // RESPONSE
+            // =================================================
+
+            String filename =
+                    files.length == 1
+                            ? files[0].getOriginalFilename()
+                            : files.length + " page report";
 
             ReportAnalysisResponse response =
                     new ReportAnalysisResponse(
                             true,
-                            file.getOriginalFilename(),
+                            filename,
                             extractedText,
                             analysis,
                             pdfUrl
@@ -89,6 +184,7 @@ public class ReportController {
             return ResponseEntity.ok(response);
 
         } catch (IOException | TesseractException e) {
+
             return ResponseEntity
                     .internalServerError()
                     .body(Map.of(
@@ -96,7 +192,9 @@ public class ReportController {
                             "error", "OCR processing failed",
                             "message", e.getMessage()
                     ));
+
         } catch (Exception e) {
+
             return ResponseEntity
                     .internalServerError()
                     .body(Map.of(
