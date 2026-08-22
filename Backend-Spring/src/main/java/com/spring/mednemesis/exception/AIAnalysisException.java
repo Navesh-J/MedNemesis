@@ -1,4 +1,4 @@
-package com.spring.mednemesis.ai;
+package com.spring.mednemesis.exception;
 
 public class AIAnalysisException extends RuntimeException {
 

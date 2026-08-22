@@ -1,10 +1,10 @@
 package com.spring.mednemesis.controller;
 
-import com.spring.mednemesis.ai.AIAnalysisException;
+import com.spring.mednemesis.exception.AIAnalysisException;
 import com.spring.mednemesis.ai.AIAnalysisService;
 import com.spring.mednemesis.model.ReportAnalysisResponse;
 import com.spring.mednemesis.ocr.OCRService;
-import com.spring.mednemesis.pdf.PDFGenerationException;
+import com.spring.mednemesis.exception.PDFGenerationException;
 import com.spring.mednemesis.pdf.PDFService;
 import net.sourceforge.tess4j.TesseractException;
 import org.springframework.http.ResponseEntity;

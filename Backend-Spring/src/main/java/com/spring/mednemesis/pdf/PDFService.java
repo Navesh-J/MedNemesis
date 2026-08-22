@@ -1,5 +1,6 @@
 package com.spring.mednemesis.pdf;
 
+import com.spring.mednemesis.exception.PDFGenerationException;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;

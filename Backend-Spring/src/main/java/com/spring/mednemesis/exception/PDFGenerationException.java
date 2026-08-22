@@ -1,4 +1,4 @@
-package com.spring.mednemesis.pdf;
+package com.spring.mednemesis.exception;
 
 public class PDFGenerationException extends RuntimeException {
 

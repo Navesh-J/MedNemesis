@@ -1,5 +1,6 @@
 package com.spring.mednemesis.ai;
 
+import com.spring.mednemesis.exception.AIAnalysisException;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 
