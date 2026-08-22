@@ -4,6 +4,7 @@ import com.spring.mednemesis.ai.AIAnalysisException;
 import com.spring.mednemesis.ai.AIAnalysisService;
 import com.spring.mednemesis.model.ReportAnalysisResponse;
 import com.spring.mednemesis.ocr.OCRService;
+import com.spring.mednemesis.pdf.PDFGenerationException;
 import com.spring.mednemesis.pdf.PDFService;
 import net.sourceforge.tess4j.TesseractException;
 import org.springframework.http.ResponseEntity;
@@ -294,6 +295,17 @@ public class ReportController {
                             "error", "AI analysis failed",
                             "message",
                             "The report could not be analyzed right now. Please try again."
+                    ));
+
+        } catch (PDFGenerationException e) {
+
+            return ResponseEntity
+                    .internalServerError()
+                    .body(Map.of(
+                            "success", false,
+                            "error", "PDF generation failed",
+                            "message",
+                            "The analysis was completed, but the PDF report could not be generated. Please try again."
                     ));
 
         } catch (IOException | TesseractException e) {

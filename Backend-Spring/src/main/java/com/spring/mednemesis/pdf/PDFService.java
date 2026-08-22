@@ -99,7 +99,7 @@ public class PDFService {
 
     public byte[] generatePDF(
             String analysis
-    ) throws IOException {
+    ) {
 
         try (
                 PDDocument document = new PDDocument();
@@ -122,10 +122,7 @@ public class PDFService {
 
             String currentSection = "";
 
-            for (
-                    PDFMarkdownParser.PDFBlock block
-                    : blocks
-            ) {
+            for (PDFMarkdownParser.PDFBlock block : blocks) {
 
                 switch (block.type()) {
 
@@ -187,7 +184,26 @@ public class PDFService {
 
             document.save(output);
 
-            return output.toByteArray();
+            byte[] result = output.toByteArray();
+
+            if (result.length == 0) {
+                throw new PDFGenerationException(
+                        "Generated PDF is empty."
+                );
+            }
+
+            return result;
+
+        } catch (PDFGenerationException e) {
+
+            throw e;
+
+        } catch (IOException | RuntimeException e) {
+
+            throw new PDFGenerationException(
+                    "Unable to generate the PDF report.",
+                    e
+            );
         }
     }
 
@@ -1015,12 +1031,6 @@ public class PDFService {
             if (text == null) {
                 return "";
             }
-
-            /*
-             * This method is only for complete lines/headings.
-             *
-             * DO NOT use this on individual inline pieces.
-             */
 
             return text
                     .replace("\r", "")
