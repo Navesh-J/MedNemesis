@@ -3,6 +3,11 @@ package com.spring.mednemesis.ocr;
 import net.sourceforge.tess4j.Tesseract;
 import net.sourceforge.tess4j.TesseractException;
 import net.sourceforge.tess4j.Word;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
+import org.apache.pdfbox.rendering.ImageType;
+import org.apache.pdfbox.rendering.PDFRenderer;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
@@ -20,6 +25,20 @@ import java.util.List;
 @Service
 public class OCRService {
 
+    /*
+     * PDF rendering resolution for scanned PDFs.
+     */
+    private static final float PDF_DPI = 200f;
+
+    /*
+     * Minimum amount of useful text required for a PDF
+     * to be considered a text-based PDF.
+     *
+     * If PDFBox extracts less than this, we assume the
+     * PDF is scanned/image-based and fall back to OCR.
+     */
+    private static final int MIN_PDF_TEXT_LENGTH = 100;
+
     private final OCRTextCleaner textCleaner;
 
     public OCRService(OCRTextCleaner textCleaner) {
@@ -27,77 +46,347 @@ public class OCRService {
     }
 
     // =========================================================
-    // MAIN OCR
+    // MAIN ENTRY POINT
     // =========================================================
 
-    public String extractText(MultipartFile file) throws IOException, TesseractException {
+    public String extractText(
+            MultipartFile file
+    ) throws IOException, TesseractException {
 
-        ClassPathResource tessdataResource = new ClassPathResource("tessdata");
+        if (file == null || file.isEmpty()) {
+            return "";
+        }
 
-        File tessdataFolder = tessdataResource.getFile();
+        if (isPDF(file)) {
+            return extractTextFromPDF(file);
+        }
 
-        File originalFile = File.createTempFile("mednemesis-original-", getExtension(file));
+        return extractTextFromImage(file);
+    }
 
-        File enhancedFile = File.createTempFile("mednemesis-enhanced-", ".png");
+    // =========================================================
+    // IMAGE OCR
+    // =========================================================
+
+    private String extractTextFromImage(
+            MultipartFile file
+    ) throws IOException, TesseractException {
+
+        File tempFile =
+                File.createTempFile(
+                        "mednemesis-image-",
+                        getExtension(file)
+                );
+
+        File enhancedFile =
+                File.createTempFile(
+                        "mednemesis-enhanced-",
+                        ".png"
+                );
 
         try {
 
-            file.transferTo(originalFile);
+            file.transferTo(tempFile);
 
-            BufferedImage original = ImageIO.read(originalFile);
+            BufferedImage original =
+                    ImageIO.read(tempFile);
+
 
             if (original == null) {
 
-                return runNormalOCR(tessdataFolder, originalFile);
+                String rawText =
+                        runNormalOCR(
+                                createTesseract(),
+                                tempFile
+                        );
+
+                return textCleaner.clean(rawText);
             }
 
-            // -------------------------------------------------
-            // Image preprocessing
-            // -------------------------------------------------
-
-            BufferedImage enhanced = createEnhancedImage(original);
-
-            ImageIO.write(enhanced, "png", enhancedFile);
-
-            // -------------------------------------------------
-            // Normal OCR
-            // -------------------------------------------------
-
-            String normalOCR = runNormalOCR(tessdataFolder, enhancedFile);
-
-            // -------------------------------------------------
-            // Spatial OCR
-            // -------------------------------------------------
-
-            String spatialOCR = runSpatialOCR(tessdataFolder, enhanced);
-
-            // -------------------------------------------------
-            // Combine
-            // -------------------------------------------------
-
-            String combinedOCR = combineOCR(normalOCR, spatialOCR);
-
-            return textCleaner.clean(combinedOCR);
+            return processImage(
+                    original,
+                    enhancedFile
+            );
 
         } finally {
 
-            deleteFile(originalFile);
+            deleteFile(tempFile);
             deleteFile(enhancedFile);
         }
     }
 
     // =========================================================
-    // NORMAL OCR
+    // PDF HANDLING
     // =========================================================
 
-    private String runNormalOCR(File tessdataFolder, File imageFile) throws TesseractException {
+    private String extractTextFromPDF(
+            MultipartFile file
+    ) throws IOException, TesseractException {
 
-        Tesseract tesseract = createTesseract(tessdataFolder);
+        File pdfFile =
+                File.createTempFile(
+                        "mednemesis-pdf-",
+                        ".pdf"
+                );
+
+        try {
+
+            file.transferTo(pdfFile);
+
+
+            try (PDDocument document =
+                         Loader.loadPDF(pdfFile)) {
+
+
+                String extractedText =
+                        extractEmbeddedPDFText(document);
+
+                if (hasEnoughText(extractedText)) {
+
+                    return textCleaner.clean(
+                            extractedText
+                    );
+                }
+
+                return extractScannedPDFText(
+                        document
+                );
+            }
+
+        } finally {
+
+            deleteFile(pdfFile);
+        }
+    }
+
+    // =========================================================
+    // TEXT-BASED PDF
+    // =========================================================
+
+    private String extractEmbeddedPDFText(
+            PDDocument document
+    ) throws IOException {
+
+        PDFTextStripper stripper =
+                new PDFTextStripper();
 
         /*
-         * PSM 6:
-         * Assume a single uniform block of text.
+         * Preserve the natural page order.
          */
+        stripper.setSortByPosition(true);
+
+        return stripper.getText(document);
+    }
+
+    // =========================================================
+    // CHECK PDF TEXT
+    // =========================================================
+
+    private boolean hasEnoughText(
+            String text
+    ) {
+
+        if (text == null) {
+            return false;
+        }
+
+        String cleaned =
+                text
+                        .replaceAll("\\s+", " ")
+                        .trim();
+
+        return cleaned.length()
+                >= MIN_PDF_TEXT_LENGTH;
+    }
+
+    // =========================================================
+    // SCANNED PDF OCR
+    // =========================================================
+
+    private String extractScannedPDFText(
+            PDDocument document
+    ) throws IOException, TesseractException {
+
+        PDFRenderer renderer =
+                new PDFRenderer(document);
+
+        /*
+         * Helps reduce memory consumption for PDFs
+         * containing very large embedded images.
+         */
+        renderer.setSubsamplingAllowed(true);
+
+        StringBuilder combinedText =
+                new StringBuilder();
+
+        int pageCount =
+                document.getNumberOfPages();
+
+        for (
+                int pageIndex = 0;
+                pageIndex < pageCount;
+                pageIndex++
+        ) {
+
+            BufferedImage pageImage =
+                    renderer.renderImageWithDPI(
+                            pageIndex,
+                            PDF_DPI,
+                            ImageType.RGB
+                    );
+
+            try {
+
+                String pageText =
+                        processPDFPage(
+                                pageImage
+                        );
+
+                if (
+                        pageText != null
+                                && !pageText.isBlank()
+                ) {
+
+                    if (!combinedText.isEmpty()) {
+                        combinedText.append("\n\n");
+                    }
+
+                    combinedText
+                            .append("===== PAGE ")
+                            .append(pageIndex + 1)
+                            .append(" =====\n\n");
+
+                    combinedText.append(pageText);
+                }
+
+            } finally {
+
+                pageImage.flush();
+            }
+        }
+
+        return textCleaner.clean(
+                combinedText.toString()
+        );
+    }
+
+    // =========================================================
+    // PROCESS IMAGE
+    // =========================================================
+
+    private String processImage(
+            BufferedImage original,
+            File enhancedFile
+    ) throws IOException, TesseractException {
+
+        BufferedImage enhanced =
+                createEnhancedImage(original);
+
+        try {
+
+            ImageIO.write(
+                    enhanced,
+                    "png",
+                    enhancedFile
+            );
+
+            /*
+             * Standard Tesseract OCR.
+             */
+            String normalOCR =
+                    runNormalOCR(
+                            createTesseract(),
+                            enhancedFile
+                    );
+
+            /*
+             * Spatial OCR using Tess4J Word objects.
+             */
+            String spatialOCR =
+                    runSpatialOCR(
+                            createTesseract(),
+                            enhanced
+                    );
+
+            /*
+             * Keep the working behavior:
+             * prefer spatial OCR when available.
+             */
+            String combinedOCR =
+                    combineOCR(
+                            normalOCR,
+                            spatialOCR
+                    );
+
+            return textCleaner.clean(
+                    combinedOCR
+            );
+
+        } finally {
+
+            enhanced.flush();
+        }
+    }
+
+    // =========================================================
+    // PROCESS SCANNED PDF PAGE
+    // =========================================================
+
+    private String processPDFPage(
+            BufferedImage pageImage
+    ) throws IOException, TesseractException {
+
+        BufferedImage enhanced =
+                createEnhancedImage(pageImage);
+
+        File enhancedFile =
+                File.createTempFile(
+                        "mednemesis-pdf-page-",
+                        ".png"
+                );
+
+        try {
+
+            ImageIO.write(
+                    enhanced,
+                    "png",
+                    enhancedFile
+            );
+
+            String normalOCR =
+                    runNormalOCR(
+                            createTesseract(),
+                            enhancedFile
+                    );
+
+            String spatialOCR =
+                    runSpatialOCR(
+                            createTesseract(),
+                            enhanced
+                    );
+
+            return combineOCR(
+                    normalOCR,
+                    spatialOCR
+            );
+
+        } finally {
+
+            enhanced.flush();
+            deleteFile(enhancedFile);
+        }
+    }
+
+    // =========================================================
+    // NORMAL TESSERACT OCR
+    // =========================================================
+
+    private String runNormalOCR(
+            Tesseract tesseract,
+            File imageFile
+    ) throws TesseractException {
+
+
         tesseract.setPageSegMode(6);
 
         return tesseract.doOCR(imageFile);
@@ -107,24 +396,23 @@ public class OCRService {
     // SPATIAL OCR
     // =========================================================
 
-    private String runSpatialOCR(File tessdataFolder, BufferedImage image) throws TesseractException {
-
-        Tesseract tesseract = createTesseract(tessdataFolder);
-
-        /*
-         * PSM 11:
-         * Sparse text.
-         */
-        tesseract.setPageSegMode(11);
+    private String runSpatialOCR(
+            Tesseract tesseract,
+            BufferedImage image
+    ) throws TesseractException {
 
         /*
-         * Tess4J 5.19.0 expects a LIST of images here.
-         *
-         * This was the source of our previous problem.
+         * Keep the exact Tess4J approach that is currently
+         * working in your project.
          */
-        List<BufferedImage> images = List.of(image);
+        List<BufferedImage> images =
+                List.of(image);
 
-        List<Word> words = tesseract.getWords(images, 3);
+        List<Word> words =
+                tesseract.getWords(
+                        images,
+                        3
+                );
 
         return reconstructLines(words);
     }
@@ -133,36 +421,60 @@ public class OCRService {
     // TESSERACT CONFIGURATION
     // =========================================================
 
-    private Tesseract createTesseract(File tessdataFolder) {
+    private Tesseract createTesseract()
+            throws IOException {
 
-        Tesseract tesseract = new Tesseract();
+        ClassPathResource tessdataResource =
+                new ClassPathResource("tessdata");
 
-        tesseract.setDatapath(tessdataFolder.getAbsolutePath());
+        File tessdataFolder =
+                tessdataResource.getFile();
+
+        Tesseract tesseract =
+                new Tesseract();
+
+        tesseract.setDatapath(
+                tessdataFolder.getAbsolutePath()
+        );
 
         tesseract.setLanguage("eng");
 
-        // Preserve spaces between columns.
+        /*
+         * Preserve spaces between table columns.
+         */
+        tesseract.setVariable(
+                "preserve_interword_spaces",
+                "1"
+        );
 
-        tesseract.setVariable("preserve_interword_spaces", "1");
-
-        // Our preprocessing enlarges the image.
-
-        tesseract.setVariable("user_defined_dpi", "300");
+        /*
+         * Tell Tesseract the image resolution.
+         */
+        tesseract.setVariable(
+                "user_defined_dpi",
+                "300"
+        );
 
         return tesseract;
     }
 
     // =========================================================
-    // RECONSTRUCT TABLE ROWS
+    // RECONSTRUCT OCR LINES
     // =========================================================
 
-    private String reconstructLines(List<Word> words) {
+    private String reconstructLines(
+            List<Word> words
+    ) {
 
-        if (words == null || words.isEmpty()) {
+        if (
+                words == null
+                        || words.isEmpty()
+        ) {
             return "";
         }
 
-        List<Word> filteredWords = new ArrayList<>();
+        List<Word> filteredWords =
+                new ArrayList<>();
 
         for (Word word : words) {
 
@@ -170,12 +482,19 @@ public class OCRService {
                 continue;
             }
 
-            String text = word.getText();
+            String text =
+                    word.getText();
 
-            if (text == null || text.isBlank()) {
+            if (
+                    text == null
+                            || text.isBlank()
+            ) {
                 continue;
             }
 
+            /*
+             * Ignore very low-confidence words.
+             */
             if (word.getConfidence() < 25) {
                 continue;
             }
@@ -183,33 +502,55 @@ public class OCRService {
             filteredWords.add(word);
         }
 
-        // Sort from top → bottom, then left → right
+        /*
+         * Sort:
+         *
+         * top → bottom
+         * left → right
+         */
+        filteredWords.sort(
+                (word1, word2) -> {
 
-        filteredWords.sort((word1, word2) -> {
+                    int yDifference =
+                            Integer.compare(
+                                    word1.getBoundingBox().y,
+                                    word2.getBoundingBox().y
+                            );
 
-            int yDifference = Integer.compare(word1.getBoundingBox().y, word2.getBoundingBox().y);
+                    if (yDifference != 0) {
+                        return yDifference;
+                    }
 
-            if (yDifference != 0) {
-                return yDifference;
-            }
+                    return Integer.compare(
+                            word1.getBoundingBox().x,
+                            word2.getBoundingBox().x
+                    );
+                }
+        );
 
-            return Integer.compare(word1.getBoundingBox().x, word2.getBoundingBox().x);
-        });
-
-        List<OCRLine> lines = new ArrayList<>();
+        List<OCRLine> lines =
+                new ArrayList<>();
 
         /*
-         * Group words that belong to the same horizontal line.
+         * Group words that belong to the same
+         * horizontal line.
          */
         for (Word word : filteredWords) {
 
-            int wordY = word.getBoundingBox().y;
+            int wordY =
+                    word.getBoundingBox().y;
 
-            OCRLine matchingLine = null;
+            OCRLine matchingLine =
+                    null;
 
             for (OCRLine line : lines) {
 
-                if (Math.abs(line.averageY() - wordY) <= 18) {
+                if (
+                        Math.abs(
+                                line.averageY()
+                                        - wordY
+                        ) <= 18
+                ) {
 
                     matchingLine = line;
                     break;
@@ -218,9 +559,12 @@ public class OCRService {
 
             if (matchingLine == null) {
 
-                matchingLine = new OCRLine();
+                matchingLine =
+                        new OCRLine();
 
-                lines.add(matchingLine);
+                lines.add(
+                        matchingLine
+                );
             }
 
             matchingLine.add(word);
@@ -229,38 +573,60 @@ public class OCRService {
         /*
          * Sort lines vertically.
          */
-        lines.sort((line1, line2) -> Integer.compare(line1.averageY(), line2.averageY()));
+        lines.sort(
+                (line1, line2) ->
+                        Integer.compare(
+                                line1.averageY(),
+                                line2.averageY()
+                        )
+        );
 
-        StringBuilder result = new StringBuilder();
+        StringBuilder result =
+                new StringBuilder();
 
         /*
-         * Build every line from left → right.
+         * Build each line from left → right.
          */
         for (OCRLine line : lines) {
 
-            line.words.sort((word1, word2) -> Integer.compare(word1.getBoundingBox().x, word2.getBoundingBox().x));
+            line.words.sort(
+                    (word1, word2) ->
+                            Integer.compare(
+                                    word1.getBoundingBox().x,
+                                    word2.getBoundingBox().x
+                            )
+            );
 
-            StringBuilder lineText = new StringBuilder();
+            StringBuilder lineText =
+                    new StringBuilder();
 
             int previousRight = -1;
 
             for (Word word : line.words) {
 
-                String text = word.getText();
+                String text =
+                        word.getText();
 
-                if (text == null || text.isBlank()) {
+                if (
+                        text == null
+                                || text.isBlank()
+                ) {
                     continue;
                 }
 
                 text = text.trim();
 
-                int x = word.getBoundingBox().x;
+                int x =
+                        word.getBoundingBox().x;
 
-                int right = word.getBoundingBox().x + word.getBoundingBox().width;
+                int right =
+                        word.getBoundingBox().x
+                                + word.getBoundingBox().width;
 
                 if (previousRight >= 0) {
 
-                    int gap = x - previousRight;
+                    int gap =
+                            x - previousRight;
 
                     /*
                      * Normal word spacing.
@@ -269,15 +635,12 @@ public class OCRService {
 
                         lineText.append(" ");
 
-                    }
-                    /*
-                     * Larger gap.
-                     *
-                     * This probably means we're moving
-                     * into another table column.
-                     */
-                    else {
+                    } else {
 
+                        /*
+                         * Larger gap usually indicates
+                         * another table column.
+                         */
                         lineText.append("    ");
                     }
                 }
@@ -306,73 +669,130 @@ public class OCRService {
             String spatialOCR
     ) {
 
-        if (spatialOCR != null && !spatialOCR.isBlank()) {
+        /*
+         * Spatial OCR is currently the preferred output
+         * because it preserves report/table structure better.
+         */
+        if (
+                spatialOCR != null
+                        && !spatialOCR.isBlank()
+        ) {
+
             return spatialOCR;
         }
 
-        return normalOCR == null ? "" : normalOCR;
+        return normalOCR == null
+                ? ""
+                : normalOCR;
     }
 
     // =========================================================
     // IMAGE PREPROCESSING
     // =========================================================
 
-    private BufferedImage createEnhancedImage(BufferedImage original) {
+    private BufferedImage createEnhancedImage(
+            BufferedImage original
+    ) {
 
         /*
-         * Upscale 3x.
+         * Upscale image 3x.
          */
         int scale = 3;
 
-        int width = original.getWidth() * scale;
+        int width =
+                original.getWidth()
+                        * scale;
 
-        int height = original.getHeight() * scale;
+        int height =
+                original.getHeight()
+                        * scale;
 
-        BufferedImage resized = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
+        BufferedImage resized =
+                new BufferedImage(
+                        width,
+                        height,
+                        BufferedImage.TYPE_INT_RGB
+                );
 
-        Graphics2D graphics = resized.createGraphics();
+        Graphics2D graphics =
+                resized.createGraphics();
 
-        graphics.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        graphics.setRenderingHint(
+                RenderingHints.KEY_INTERPOLATION,
+                RenderingHints.VALUE_INTERPOLATION_BICUBIC
+        );
 
-        graphics.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+        graphics.setRenderingHint(
+                RenderingHints.KEY_RENDERING,
+                RenderingHints.VALUE_RENDER_QUALITY
+        );
 
-        graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        graphics.setRenderingHint(
+                RenderingHints.KEY_ANTIALIASING,
+                RenderingHints.VALUE_ANTIALIAS_ON
+        );
 
-        graphics.drawImage(original, 0, 0, width, height, null);
+        graphics.drawImage(
+                original,
+                0,
+                0,
+                width,
+                height,
+                null
+        );
 
         graphics.dispose();
 
-        // -----------------------------------------------------
-        // Grayscale
-        // -----------------------------------------------------
+        /*
+         * Convert to grayscale.
+         */
+        BufferedImage grayscale =
+                new BufferedImage(
+                        width,
+                        height,
+                        BufferedImage.TYPE_BYTE_GRAY
+                );
 
-        BufferedImage grayscale = new BufferedImage(width, height, BufferedImage.TYPE_BYTE_GRAY);
+        Graphics2D grayGraphics =
+                grayscale.createGraphics();
 
-        Graphics2D grayGraphics = grayscale.createGraphics();
-
-        grayGraphics.drawImage(resized, 0, 0, null);
+        grayGraphics.drawImage(
+                resized,
+                0,
+                0,
+                null
+        );
 
         grayGraphics.dispose();
 
-        // -----------------------------------------------------
-        // Contrast
-        // -----------------------------------------------------
+        resized.flush();
 
-        RescaleOp contrast = new RescaleOp(1.25f, -15f, null);
+        /*
+         * Contrast enhancement.
+         */
+        RescaleOp contrast =
+                new RescaleOp(
+                        1.25f,
+                        -15f,
+                        null
+                );
 
-        return contrast.filter(grayscale, null);
+        return contrast.filter(
+                grayscale,
+                null
+        );
     }
 
     // =========================================================
-    // OCR LINE
+    // OCR LINE MODEL
     // =========================================================
 
     private static class OCRLine {
 
-        private final List<Word> words = new ArrayList<>();
+        private final List<Word> words =
+                new ArrayList<>();
 
         void add(Word word) {
-
             words.add(word);
         }
 
@@ -386,7 +806,8 @@ public class OCRService {
 
             for (Word word : words) {
 
-                total += word.getBoundingBox().y;
+                total +=
+                        word.getBoundingBox().y;
             }
 
             return total / words.size();
@@ -394,13 +815,46 @@ public class OCRService {
     }
 
     // =========================================================
-    // DELETE TEMP FILE
+    // PDF DETECTION
+    // =========================================================
+
+    private boolean isPDF(
+            MultipartFile file
+    ) {
+
+        String contentType =
+                file.getContentType();
+
+        if (
+                "application/pdf"
+                        .equalsIgnoreCase(contentType)
+        ) {
+            return true;
+        }
+
+        String filename =
+                file.getOriginalFilename();
+
+        return filename != null
+                && filename
+                .toLowerCase()
+                .endsWith(".pdf");
+    }
+
+    // =========================================================
+    // TEMP FILE CLEANUP
     // =========================================================
 
     private void deleteFile(File file) {
 
-        if (file != null && file.exists()) {
-            file.delete();
+        if (
+                file != null
+                        && file.exists()
+        ) {
+
+            if (!file.delete()) {
+                file.deleteOnExit();
+            }
         }
     }
 
@@ -408,14 +862,22 @@ public class OCRService {
     // FILE EXTENSION
     // =========================================================
 
-    private String getExtension(MultipartFile file) {
+    private String getExtension(
+            MultipartFile file
+    ) {
 
-        String filename = file.getOriginalFilename();
+        String filename =
+                file.getOriginalFilename();
 
-        if (filename == null || !filename.contains(".")) {
+        if (
+                filename == null
+                        || !filename.contains(".")
+        ) {
             return ".tmp";
         }
 
-        return filename.substring(filename.lastIndexOf("."));
+        return filename.substring(
+                filename.lastIndexOf(".")
+        );
     }
 }
