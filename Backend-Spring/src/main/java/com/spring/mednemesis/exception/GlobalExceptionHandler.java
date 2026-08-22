@@ -46,4 +46,17 @@ public class GlobalExceptionHandler {
                         "Something went wrong while processing the report. Please try again."
                 ));
     }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<?> handleBadRequest(
+            IllegalArgumentException e) {
+
+        return ResponseEntity
+                .badRequest()
+                .body(Map.of(
+                        "success", false,
+                        "error", "Invalid report upload",
+                        "message", e.getMessage()
+                ));
+    }
 }

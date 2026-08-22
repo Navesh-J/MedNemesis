@@ -2,10 +2,11 @@ package com.spring.mednemesis.controller;
 
 import com.spring.mednemesis.exception.AIAnalysisException;
 import com.spring.mednemesis.ai.AIAnalysisService;
+import com.spring.mednemesis.exception.PDFGenerationException;
 import com.spring.mednemesis.model.ReportAnalysisResponse;
 import com.spring.mednemesis.ocr.OCRService;
-import com.spring.mednemesis.exception.PDFGenerationException;
 import com.spring.mednemesis.pdf.PDFService;
+import com.spring.mednemesis.validation.ReportFileValidator;
 import net.sourceforge.tess4j.TesseractException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,7 +19,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -26,23 +26,21 @@ import java.util.UUID;
 @RequestMapping("/api/reports")
 public class ReportController {
 
-    private static final int MAX_FILES = 10;
-
-    private static final long MAX_FILE_SIZE =
-            10L * 1024 * 1024;
-
     private final OCRService ocrService;
     private final AIAnalysisService aiAnalysisService;
     private final PDFService pdfService;
+    private final ReportFileValidator reportFileValidator;
 
     public ReportController(
             OCRService ocrService,
             AIAnalysisService aiAnalysisService,
-            PDFService pdfService) {
+            PDFService pdfService,
+            ReportFileValidator reportFileValidator) {
 
         this.ocrService = ocrService;
         this.aiAnalysisService = aiAnalysisService;
         this.pdfService = pdfService;
+        this.reportFileValidator = reportFileValidator;
     }
 
     @PostMapping("/analyze")
@@ -50,82 +48,10 @@ public class ReportController {
             @RequestParam("files") MultipartFile[] files) {
 
         // =====================================================
-        // VALIDATE FILE LIST
+        // VALIDATE UPLOAD
         // =====================================================
 
-        if (files == null || files.length == 0) {
-
-            return ResponseEntity
-                    .badRequest()
-                    .body(Map.of(
-                            "success", false,
-                            "error", "At least one file is required"
-                    ));
-        }
-
-        if (files.length > MAX_FILES) {
-
-            return ResponseEntity
-                    .badRequest()
-                    .body(Map.of(
-                            "success", false,
-                            "error",
-                            "Maximum " + MAX_FILES + " files are allowed"
-                    ));
-        }
-
-        // =====================================================
-        // VALIDATE EACH FILE
-        // =====================================================
-
-        for (MultipartFile file : files) {
-
-            if (file == null) {
-
-                return ResponseEntity
-                        .badRequest()
-                        .body(Map.of(
-                                "success", false,
-                                "error", "Invalid file received"
-                        ));
-            }
-
-            if (file.isEmpty()) {
-
-                return ResponseEntity
-                        .badRequest()
-                        .body(Map.of(
-                                "success", false,
-                                "error",
-                                getFileName(file)
-                                        + ": File is empty"
-                        ));
-            }
-
-            if (file.getSize() > MAX_FILE_SIZE) {
-
-                return ResponseEntity
-                        .badRequest()
-                        .body(Map.of(
-                                "success", false,
-                                "error",
-                                getFileName(file)
-                                        + ": File size must not exceed 10 MB"
-                        ));
-            }
-
-            if (!isSupportedFile(file)) {
-
-                return ResponseEntity
-                        .badRequest()
-                        .body(Map.of(
-                                "success", false,
-                                "error",
-                                getFileName(file)
-                                        + ": Only JPG, JPEG, PNG and PDF files are supported"
-                        ));
-            }
-        }
+        reportFileValidator.validate(files);
 
         try {
 
@@ -292,7 +218,8 @@ public class ReportController {
                     .internalServerError()
                     .body(Map.of(
                             "success", false,
-                            "error", "AI analysis failed",
+                            "error",
+                            "AI analysis failed",
                             "message",
                             "The report could not be analyzed right now. Please try again."
                     ));
@@ -303,7 +230,8 @@ public class ReportController {
                     .internalServerError()
                     .body(Map.of(
                             "success", false,
-                            "error", "PDF generation failed",
+                            "error",
+                            "PDF generation failed",
                             "message",
                             "The analysis was completed, but the PDF report could not be generated. Please try again."
                     ));
@@ -329,90 +257,9 @@ public class ReportController {
                             "error",
                             "Report analysis failed",
                             "message",
-                            safeMessage(e)
+                            "Something went wrong while processing the report. Please try again."
                     ));
         }
-    }
-
-    // =========================================================
-    // FILE TYPE VALIDATION
-    // =========================================================
-
-    private boolean isSupportedFile(
-            MultipartFile file
-    ) {
-
-        String contentType =
-                file.getContentType();
-
-        String filename =
-                file.getOriginalFilename();
-
-        String lowerFilename =
-                filename == null
-                        ? ""
-                        : filename
-                        .toLowerCase(Locale.ROOT);
-
-        // -----------------------------------------------------
-        // PDF
-        // -----------------------------------------------------
-
-        if (
-                "application/pdf"
-                        .equalsIgnoreCase(contentType)
-                        || lowerFilename.endsWith(".pdf")
-        ) {
-            return true;
-        }
-
-        // -----------------------------------------------------
-        // JPEG
-        // -----------------------------------------------------
-
-        if (
-                "image/jpeg"
-                        .equalsIgnoreCase(contentType)
-                        || lowerFilename.endsWith(".jpg")
-                        || lowerFilename.endsWith(".jpeg")
-        ) {
-            return true;
-        }
-
-        // -----------------------------------------------------
-        // PNG
-        // -----------------------------------------------------
-
-        if (
-                "image/png"
-                        .equalsIgnoreCase(contentType)
-                        || lowerFilename.endsWith(".png")
-        ) {
-            return true;
-        }
-
-        return false;
-    }
-
-    // =========================================================
-    // FILE NAME
-    // =========================================================
-
-    private String getFileName(
-            MultipartFile file
-    ) {
-
-        if (
-                file == null
-                        || file.getOriginalFilename() == null
-                        || file.getOriginalFilename()
-                        .isBlank()
-        ) {
-
-            return "Uploaded file";
-        }
-
-        return file.getOriginalFilename();
     }
 
     // =========================================================
@@ -430,6 +277,7 @@ public class ReportController {
                 message == null
                         || message.isBlank()
         ) {
+
             return "No additional information available";
         }
 
