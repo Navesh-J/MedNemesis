@@ -1,5 +1,6 @@
 package com.spring.mednemesis.controller;
 
+import com.spring.mednemesis.ai.AIAnalysisException;
 import com.spring.mednemesis.ai.AIAnalysisService;
 import com.spring.mednemesis.model.ReportAnalysisResponse;
 import com.spring.mednemesis.ocr.OCRService;
@@ -284,6 +285,17 @@ public class ReportController {
                     response
             );
 
+        } catch (AIAnalysisException e) {
+
+            return ResponseEntity
+                    .internalServerError()
+                    .body(Map.of(
+                            "success", false,
+                            "error", "AI analysis failed",
+                            "message",
+                            "The report could not be analyzed right now. Please try again."
+                    ));
+
         } catch (IOException | TesseractException e) {
 
             return ResponseEntity
@@ -381,7 +393,8 @@ public class ReportController {
         if (
                 file == null
                         || file.getOriginalFilename() == null
-                        || file.getOriginalFilename().isBlank()
+                        || file.getOriginalFilename()
+                        .isBlank()
         ) {
 
             return "Uploaded file";
