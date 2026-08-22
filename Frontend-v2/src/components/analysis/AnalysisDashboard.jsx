@@ -270,7 +270,7 @@ function AnalysisDashboard({ report }) {
           </button>
 
           {showOCR && (
-            <pre className="max-h-[500px] overflow-auto whitespace-pre-wrap border-t border-slate-800 bg-slate-950 p-5 text-xs leading-6 text-slate-400">
+            <pre className="max-h-125 overflow-auto whitespace-pre-wrap border-t border-slate-800 bg-slate-950 p-5 text-xs leading-6 text-slate-400">
               {report.ocrText}
             </pre>
           )}
