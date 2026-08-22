@@ -168,12 +168,7 @@ function UploadZone({ onAnalysisComplete }) {
     setError("");
 
     try {
-      /*
-       * Current Spring Boot backend accepts ONE file.
-       *
-       * Multi-page processing will be implemented in Phase 9.
-       */
-      const result = await analyzeReport(files[0]);
+      const result = await analyzeReport(files);
 
       if (onAnalysisComplete) {
         onAnalysisComplete(result);
