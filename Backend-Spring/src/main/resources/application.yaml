@@ -15,7 +15,7 @@ spring:
       max-request-size: 100MB
 
 server:
-  port: 8080
+  port: ${PORT:8080}
 
 mednemesis:
   upload:
