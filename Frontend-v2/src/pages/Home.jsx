@@ -6,6 +6,13 @@ import logo from "../assets/logo.png";
 function Home() {
   const [report, setReport] = useState(null);
 
+  useEffect(() => {
+    fetch("https://mednemesis.onrender.com/health")
+      .catch(() => {
+        // Ignore wake-up errors.
+      });
+  }, []);
+
   const handleReset = () => {
     setReport(null);
   };
