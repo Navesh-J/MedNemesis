@@ -1,5 +1,6 @@
 package com.spring.mednemesis.validation;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -9,10 +10,8 @@ import java.util.Set;
 @Component
 public class ReportFileValidator {
 
-    private static final int MAX_FILES = 10;
-
-    private static final long MAX_FILE_SIZE =
-            10L * 1024 * 1024;
+    @Value("${mednemesis.upload.max-files:10}")
+    private int maxFiles;
 
     private static final Set<String> ALLOWED_EXTENSIONS =
             Set.of(
@@ -35,10 +34,10 @@ public class ReportFileValidator {
             );
         }
 
-        if (files.length > MAX_FILES) {
+        if (files.length > maxFiles) {
 
             throw new IllegalArgumentException(
-                    "Maximum " + MAX_FILES +
+                    "Maximum " + maxFiles +
                             " files are allowed per request."
             );
         }
@@ -61,14 +60,6 @@ public class ReportFileValidator {
                 throw new IllegalArgumentException(
                         getFileName(file) +
                                 ": File is empty."
-                );
-            }
-
-            if (file.getSize() > MAX_FILE_SIZE) {
-
-                throw new IllegalArgumentException(
-                        getFileName(file) +
-                                ": File size must not exceed 10 MB."
                 );
             }
 
@@ -108,13 +99,6 @@ public class ReportFileValidator {
             );
         }
 
-        /*
-         * The filename extension is used as the primary check.
-         *
-         * Content type is intentionally not required here because browsers
-         * and clients can send different MIME values for otherwise valid
-         * files.
-         */
     }
 
     // =========================================================
