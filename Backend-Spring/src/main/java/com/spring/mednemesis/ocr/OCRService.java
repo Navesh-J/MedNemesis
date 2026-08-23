@@ -19,6 +19,10 @@ import java.awt.image.BufferedImage;
 import java.awt.image.RescaleOp;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -40,6 +44,19 @@ public class OCRService {
     private static final int MIN_PDF_TEXT_LENGTH = 100;
 
     private final OCRTextCleaner textCleaner;
+
+    /*
+     * Tesseract trained-data directory.
+     *
+     * In local development this points directly to the
+     * classpath tessdata directory.
+     *
+     * Inside a packaged Spring Boot JAR, the tessdata
+     * directory is not a real filesystem directory, so
+     * we extract the required traineddata file to a
+     * temporary filesystem directory.
+     */
+    private Path tessdataPath;
 
     public OCRService(OCRTextCleaner textCleaner) {
         this.textCleaner = textCleaner;
@@ -91,7 +108,6 @@ public class OCRService {
             BufferedImage original =
                     ImageIO.read(tempFile);
 
-
             if (original == null) {
 
                 String rawText =
@@ -133,10 +149,8 @@ public class OCRService {
 
             file.transferTo(pdfFile);
 
-
             try (PDDocument document =
                          Loader.loadPDF(pdfFile)) {
-
 
                 String extractedText =
                         extractEmbeddedPDFText(document);
@@ -386,7 +400,6 @@ public class OCRService {
             File imageFile
     ) throws TesseractException {
 
-
         tesseract.setPageSegMode(6);
 
         return tesseract.doOCR(imageFile);
@@ -424,17 +437,23 @@ public class OCRService {
     private Tesseract createTesseract()
             throws IOException {
 
-        ClassPathResource tessdataResource =
-                new ClassPathResource("tessdata");
-
-        File tessdataFolder =
-                tessdataResource.getFile();
-
         Tesseract tesseract =
                 new Tesseract();
 
+        /*
+         * IMPORTANT:
+         *
+         * Spring Boot runs from a normal filesystem during
+         * local development, but inside the packaged JAR
+         * tessdata exists inside the JAR itself.
+         *
+         * Therefore we resolve the tessdata directory
+         * through getTessdataPath(), which handles both
+         * situations.
+         */
         tesseract.setDatapath(
-                tessdataFolder.getAbsolutePath()
+                getTessdataPath()
+                        .toString()
         );
 
         tesseract.setLanguage("eng");
@@ -459,6 +478,110 @@ public class OCRService {
     }
 
     // =========================================================
+    // TESSDATA PATH
+    // =========================================================
+
+    private synchronized Path getTessdataPath()
+            throws IOException {
+
+        /*
+         * Already initialized.
+         */
+        if (
+                tessdataPath != null
+                        && Files.exists(tessdataPath)
+        ) {
+
+            return tessdataPath;
+        }
+
+        ClassPathResource tessdataResource =
+                new ClassPathResource("tessdata");
+
+        /*
+         * =====================================================
+         * LOCAL DEVELOPMENT
+         * =====================================================
+         *
+         * During IntelliJ / Maven development,
+         * tessdata exists as an actual filesystem directory.
+         */
+        if (tessdataResource.isFile()) {
+
+            tessdataPath =
+                    tessdataResource
+                            .getFile()
+                            .toPath();
+
+            return tessdataPath;
+        }
+
+        /*
+         * =====================================================
+         * PACKAGED JAR / DOCKER
+         * =====================================================
+         *
+         * Inside a Spring Boot executable JAR,
+         * tessdata is located inside the JAR and therefore
+         * cannot be accessed using Resource#getFile().
+         *
+         * Extract the required traineddata file to a real
+         * temporary directory.
+         */
+        tessdataPath =
+                Files.createTempDirectory(
+                        "mednemesis-tessdata-"
+                );
+
+        copyTessdataFile(
+                tessdataPath,
+                "eng.traineddata"
+        );
+
+        return tessdataPath;
+    }
+
+    // =========================================================
+    // COPY TESSDATA FROM CLASSPATH
+    // =========================================================
+
+    private void copyTessdataFile(
+            Path targetDirectory,
+            String filename
+    ) throws IOException {
+
+        ClassPathResource resource =
+                new ClassPathResource(
+                        "tessdata/" + filename
+                );
+
+        if (!resource.exists()) {
+
+            throw new IOException(
+                    "Required Tesseract traineddata file was not found: "
+                            + filename
+            );
+        }
+
+        Path targetFile =
+                targetDirectory.resolve(
+                        filename
+                );
+
+        try (
+                InputStream inputStream =
+                        resource.getInputStream()
+        ) {
+
+            Files.copy(
+                    inputStream,
+                    targetFile,
+                    StandardCopyOption.REPLACE_EXISTING
+            );
+        }
+    }
+
+    // =========================================================
     // RECONSTRUCT OCR LINES
     // =========================================================
 
@@ -470,6 +593,7 @@ public class OCRService {
                 words == null
                         || words.isEmpty()
         ) {
+
             return "";
         }
 
@@ -489,6 +613,7 @@ public class OCRService {
                     text == null
                             || text.isBlank()
             ) {
+
                 continue;
             }
 
@@ -611,6 +736,7 @@ public class OCRService {
                         text == null
                                 || text.isBlank()
                 ) {
+
                     continue;
                 }
 
@@ -829,6 +955,7 @@ public class OCRService {
                 "application/pdf"
                         .equalsIgnoreCase(contentType)
         ) {
+
             return true;
         }
 
@@ -873,6 +1000,7 @@ public class OCRService {
                 filename == null
                         || !filename.contains(".")
         ) {
+
             return ".tmp";
         }
 
