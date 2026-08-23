@@ -5,8 +5,9 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
 import org.apache.pdfbox.pdmodel.common.PDRectangle;
-import org.apache.pdfbox.pdmodel.font.PDType1Font;
-import org.apache.pdfbox.pdmodel.font.Standard14Fonts;
+import org.apache.pdfbox.pdmodel.font.PDFont;
+import org.apache.pdfbox.pdmodel.font.PDType0Font;
+import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 
 import java.awt.Color;
@@ -245,25 +246,40 @@ public class PDFService {
 
         private int pageNumber = 0;
 
-        private final PDType1Font regular =
-                new PDType1Font(
-                        Standard14Fonts.FontName.HELVETICA
-                );
-
-        private final PDType1Font bold =
-                new PDType1Font(
-                        Standard14Fonts.FontName.HELVETICA_BOLD
-                );
+        private final PDFont regular;
+        private final PDFont bold;
 
         PDFWriter(
                 PDDocument document,
                 PDFInlineMarkdownParser inlineMarkdownParser
-        ) {
+        ) throws IOException {
 
             this.document = document;
 
             this.inlineMarkdownParser =
                     inlineMarkdownParser;
+
+            ClassPathResource regularFontResource =
+                    new ClassPathResource(
+                            "fonts/NotoSans-Regular.ttf"
+                    );
+
+            ClassPathResource boldFontResource =
+                    new ClassPathResource(
+                            "fonts/NotoSans-Bold.ttf"
+                    );
+
+            this.regular =
+                    PDType0Font.load(
+                            document,
+                            regularFontResource.getInputStream()
+                    );
+
+            this.bold =
+                    PDType0Font.load(
+                            document,
+                            boldFontResource.getInputStream()
+                    );
         }
 
         // =====================================================
@@ -559,7 +575,8 @@ public class PDFService {
 
                 if (
                         segment.text() == null
-                                || segment.text().isEmpty()
+                                || segment.text()
+                                .isEmpty()
                 ) {
                     continue;
                 }
@@ -611,7 +628,7 @@ public class PDFService {
                         continue;
                     }
 
-                    PDType1Font font =
+                    PDFont font =
                             getFont(piece);
 
                     float wordWidth =
@@ -718,12 +735,13 @@ public class PDFService {
 
                 if (
                         piece.text() == null
-                                || piece.text().isEmpty()
+                                || piece.text()
+                                .isEmpty()
                 ) {
                     continue;
                 }
 
-                PDType1Font font =
+                PDFont font =
                         getFont(piece);
 
                 /*
@@ -782,7 +800,7 @@ public class PDFService {
         // FONT SELECTION
         // =====================================================
 
-        PDType1Font getFont(
+        PDFont getFont(
                 StyledPiece piece
         ) {
 
@@ -800,7 +818,7 @@ public class PDFService {
 
         float getTextWidth(
                 String text,
-                PDType1Font font,
+                PDFont font,
                 float fontSize
         ) {
 
