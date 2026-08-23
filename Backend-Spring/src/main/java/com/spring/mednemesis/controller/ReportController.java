@@ -238,6 +238,8 @@ public class ReportController {
 
         } catch (IOException | TesseractException e) {
 
+            e.printStackTrace();
+
             return ResponseEntity
                     .internalServerError()
                     .body(Map.of(
@@ -249,6 +251,8 @@ public class ReportController {
                     ));
 
         } catch (Exception e) {
+
+            e.printStackTrace();
 
             return ResponseEntity
                     .internalServerError()
